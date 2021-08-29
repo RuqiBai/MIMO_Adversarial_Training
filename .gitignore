@@ -1,0 +1,4 @@
+*.pth
+checkpoint/*
+data/*
+__pycharm__/
