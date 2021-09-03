@@ -145,7 +145,7 @@ class MSDStep(AttackStep):
                         f.write(',')
                     inputs_tmp[:, self.model.submodel_channels * j:self.model.submodel_channels * (j + 1), :, :] = torch.clamp(original_inputs[:, self.model.submodel_channels * j:self.model.submodel_channels * (j + 1), :, :] + delta, min=0, max=1)
                 inputs_step.append(inputs_tmp)
-                loss.append(self.model.calc_loss(self.model(inputs_step[-1]), targets, mode="sum"))
+                loss.append(self.model.calc_loss(self.model(inputs_step[-1]), targets))
             if f:
                 f.write('\n')
                 f.write('loss value: ')
@@ -163,7 +163,7 @@ class MSDStep(AttackStep):
 
 
 class PGDAttack(object):
-    def __init__(self, model, alpha, epsilon, norm, max_iteration, msd=False, random_start=True, verbose=True):
+    def __init__(self, model, alpha, epsilon, norm, max_iteration, msd=False, random_start=True, verbose=False):
         self.model = model
         assert len(alpha) == len(epsilon) and len(epsilon) == len(norm)
         self.alpha = alpha
@@ -178,10 +178,13 @@ class PGDAttack(object):
         self.random_start = random_start
         self.verbose = verbose
         if self.verbose:
-            self.f = open("CIFAR10/verbose.txt", 'w')
+            self.f = open("verbose.txt", 'w')
 
+        else:
+            self.f = False
     def __del__(self):
-        self.f.close()
+        if self.verbose:
+            self.f.close()
 
     @staticmethod
     def _random_project(x, norm, epsilon):
@@ -221,13 +224,14 @@ class PGDAttack(object):
         else:
             adv_inputs = inputs.clone().detach()
         criterion = nn.CrossEntropyLoss()
-        self.f.write('inputs hash value: ')
-        self.f.write(','.join([str(float(elem)) for elem in torch.sum(inputs, dim=(1,2,3))]))
-        self.f.write('\n')
+        if self.verbose:
+            self.f.write('inputs hash value: ')
+            self.f.write(','.join([str(float(elem)) for elem in torch.sum(inputs, dim=(1,2,3))]))
+            self.f.write('\n')
         for j in range(self.max_iteration):
             adv_inputs.requires_grad = True
             outputs = self.model(adv_inputs)
-            loss = self.model.calc_loss(outputs, targets, mode="avg")
+            loss = torch.sum(self.model.calc_loss(outputs, targets))
             loss.backward()
             grad = adv_inputs.grad.data
             adv_inputs = self.attack.step(inputs, adv_inputs, targets, grad, self.f)

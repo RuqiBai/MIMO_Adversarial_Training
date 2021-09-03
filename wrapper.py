@@ -14,7 +14,7 @@ class ModelWrapper(nn.Module):
         self.num_classes = num_classes
         self.ensembles = ensembles
         self.criterion = criterion
-        assert self.model.conv1.in_channels == self.submodel_channels * self.ensembles
+        assert self.model.module.conv1.in_channels == self.submodel_channels * self.ensembles
 
     def forward(self, x, *args):
         return self.model(x)
