@@ -31,7 +31,7 @@ parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 args = parser.parse_args()
 
-data_file = "../../../data/"
+data_file = "/local/scratch/a/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
@@ -121,9 +121,9 @@ if args.resume:
     optimizer = checkpoint['optimizer']
     scheduler.load_state_dict(checkpoint['scheduler'])
 
-def train(model):
+def train(model, epoch):
     model.train()
-    if args.adv_training:
+    if args.adv_training and epoch > 1:
         attack = PGDAttack(model, alpha=args.alpha, epsilon=args.epsilon, norm=args.norm, max_iteration=args.max_iter, msd=True, random_start=True)
 
     correct = torch.zeros(args.ensembles)
@@ -136,7 +136,7 @@ def train(model):
             targets.append(ensemble_data[1])
         inputs = torch.cat(inputs, dim=1).to(device)
         targets = torch.stack(targets, dim=1).to(device)
-        if args.adv_training:
+        if args.adv_training and epoch > 1:
             adv_inputs = attack.generate(inputs, targets)
             outputs = model(adv_inputs)
         else:
@@ -158,9 +158,10 @@ def train(model):
         total += targets.size(0)
         print(batch_idx, len(trainloader[0]),
               'lr: {} | Loss: {} | Acc: {}'.format(str(optimizer.param_groups[0]["lr"]),
-                                                       str([round(loss.item(), 3) for loss in
-                                                            loss_list]),
-                                                       str([round(100. * cor.item() / total, 3) for cor in correct])))
+                                                       str([round(loss.item(), 3) for loss in loss_list]),
+                                                       str([round(100. * cor.item() / total, 3) for cor in correct])), end='\r')
+    print("")
+
 
 def test(epoch, net):
 
@@ -187,8 +188,8 @@ def test(epoch, net):
         correct += correct_batch
         # adv_correct += adv_correct_batch
         print(batch_idx, len(testloader), 'Acc: {},{}'.format(str(round(100. * correct / total, 3)),
-                                                              str(round(100. * adv_correct / total, 3))))
-
+                                                              str(round(100. * adv_correct / total, 3))), end="\r")
+    print("")
     # Save checkpoint.
     acc = 100. * correct / total
     # if acc > best_acc:
@@ -210,7 +211,8 @@ def test(epoch, net):
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        train(ModelWrapper(net, submodel_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
+        train(ModelWrapper(net, submodel_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
         scheduler.step()
         if epoch % 5 == 0:
             test(epoch, TestWrapper(net, submodel_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
+        
