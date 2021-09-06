@@ -119,7 +119,7 @@ class PGDStep(AttackStep):
                 sub_inputs = inputs[:, i*self.model.sub_in_channels:(i+1)*self.model.sub_in_channels]
                 sub_delta = delta[:, i*self.model.sub_in_channels:(i+1)*self.model.sub_in_channels]
                 sub_grad = grad[:, i*self.model.sub_in_channels:(i+1)*self.model.sub_in_channels]
-                sub_delta += self._deepest_grad(sub_inputs, sub_grad, self.norm[i], self.alpha[i], True)
+                sub_delta += self._deepest_grad(sub_inputs, sub_grad, self.norm[i], self.alpha[i], check_available=True)
                 delta[:, i*self.model.sub_in_channels:(i+1)*self.model.sub_in_channels] = self._project(sub_delta, self.norm[i], self.epsilon[i])
             new_delta = torch.clamp(inputs+delta, min=0, max=1) - inputs
         return new_delta
@@ -142,7 +142,7 @@ class MSDStep(AttackStep):
                     sub_inputs = inputs[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
                     sub_grad = grad[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
                     sub_delta = delta[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
-                    tmp_delta = sub_delta + self._deepest_grad(sub_inputs, sub_grad, self.norm[i], self.alpha[i], True)
+                    tmp_delta = sub_delta + self._deepest_grad(sub_inputs, sub_grad, self.norm[i], self.alpha[i], check_available=True)
                     tmp_delta_list[j][:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels] = self._project(tmp_delta, self.norm[i], self.epsilon[i])
                     if f:
                         f.write(str(torch.norm(delta.reshape(delta.shape[0], -1), dim=1, p=self.norm[i])[0].item()))
@@ -162,7 +162,6 @@ class MSDStep(AttackStep):
 
             for i in range(self.model.ensembles):
                 delta[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels] = tmp_delta_list[max_index[i]][:, self.model.sub_in_channels * i:self.model.sub_in_channels * (i + 1), :, :]
-                print((delta[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]).reshape(delta.shape[0], -1).norm(p=self.norm[i], dim=1))
         return delta.detach()
 
 
