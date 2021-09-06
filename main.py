@@ -204,15 +204,16 @@ def test(epoch, net):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt_msd_{}.pth'.format(epoch))
+
+        torch.save(state, './checkpoint/ckpt_{}_{}.pth'.format(epoch))
         best_acc = acc
 
 
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        train(ModelWrapper(net, submodel_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
+        train(ModelWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
         scheduler.step()
         if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, submodel_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
+            test(epoch, TestWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
         

@@ -7,14 +7,14 @@ class ModelWrapper(nn.Module):
     """
     Wrapping the model to fit the requirement of the ART toolbox.
     """
-    def __init__(self, model, submodel_channels, num_classes, ensembles, criterion):
+    def __init__(self, model, sub_in_channels, num_classes, ensembles, criterion):
         super().__init__()
         self.model = model
-        self.submodel_channels = submodel_channels
+        self.sub_in_channels = sub_in_channels
         self.num_classes = num_classes
         self.ensembles = ensembles
         self.criterion = criterion
-        assert self.model.module.conv1.in_channels == self.submodel_channels * self.ensembles
+        assert self.model.module.conv1.in_channels == self.sub_in_channels * self.ensembles
 
     def forward(self, x, *args):
         return self.model(x)
