@@ -34,7 +34,8 @@ class AttackStep(object):
             abs_grad = torch.abs(grad)
             if check_available:
                 gap = alpha / k
-                abs_grad[torch.abs(x) + gap > 1] = 0
+                # gap = 0
+                abs_grad[torch.abs(x + torch.sign(grad) * gap - 0.5) > 0.5] = 0
             view = abs_grad.view(grad.shape[0], -1)
             vals, idx = view.topk(k)
             out = torch.zeros_like(view).scatter_(1, idx, 1)
