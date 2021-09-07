@@ -31,7 +31,7 @@ parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 args = parser.parse_args()
 
-data_file = "../../../data/"
+data_file = "/local/scratch/a/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
@@ -50,11 +50,11 @@ print('==> Building model..')
 if args.model == 'nn':
     net = net(args.ensembles)
 elif args.model == 'resnet18':
-    net = ResNet18(args.ensembles, args.ensembles*num_classes).to(device)
+    net = ResNet18(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
 elif args.model == 'resnet50':
-    net = ResNet50(args.ensembles, args.ensembles*10).to(device)
+    net = ResNet50(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
 elif args.model == 'preact_resnet18':
-    net = PreActResNet18(args.ensembles, args.ensembles*10).to(device)
+    net = PreActResNet18(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
 else:
     raise ModuleNotFoundError("Unknown model")
 if device == 'cuda':
@@ -204,8 +204,21 @@ def test(epoch, net):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-
-        torch.save(state, './checkpoint/ckpt_{}_{}.pth'.format(epoch))
+        if args.ensembles > 1:
+            if args.msd:
+                checkpoint_name = 'mm'
+            elif args.adv_training:
+                checkpoint_name = 'mat'
+            else:
+                checkpoint_name = 'mimo'
+        else:
+            if args.msd:
+                checkpoint_name = 'msd'
+            elif args.adv_training:
+                checkpoint_name = 'adv_training'
+            else:
+                checkpoint_name = 'standard'
+        torch.save(state, './checkpoint/ckpt_{}_{}_{}.pth'.format(checkpoint_name,args.dataset,epoch))
         best_acc = acc
 
 
