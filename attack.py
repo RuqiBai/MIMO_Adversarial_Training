@@ -143,8 +143,8 @@ class MSDStep(AttackStep):
                     sub_inputs = inputs[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
                     sub_grad = grad[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
                     sub_delta = delta[:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels]
-                    tmp_delta = sub_delta + self._deepest_grad(sub_inputs, sub_grad, self.norm[i], self.alpha[i], check_available=True)
-                    tmp_delta_list[j][:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels] = self._project(tmp_delta, self.norm[i], self.epsilon[i])
+                    tmp_delta = sub_delta + self._deepest_grad(sub_inputs, sub_grad, self.norm[j], self.alpha[j], check_available=True)
+                    tmp_delta_list[j][:, i * self.model.sub_in_channels:(i + 1) * self.model.sub_in_channels] = self._project(tmp_delta, self.norm[j], self.epsilon[j])
                     if f:
                         f.write(str(torch.norm(delta.reshape(delta.shape[0], -1), dim=1, p=self.norm[i])[0].item()))
                         f.write(',')
