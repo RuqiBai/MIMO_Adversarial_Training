@@ -55,11 +55,7 @@ class CIFARWrapper(ModelWrapper):
         out = self.normalize(x)
         return self.model(out)
 
-class CIFARTestWrapper(TestWrapper):
-    def __init__(self):
-        super().__init__()
-        self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))
-
+class CIFARTestWrapper(CIFARWrapper):
     def forward(self, x, softmax=True):
         out = self.normalize(x)
         out = out.repeat(1, self.ensembles, 1, 1)
