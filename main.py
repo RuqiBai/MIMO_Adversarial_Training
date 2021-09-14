@@ -12,7 +12,7 @@ import torchvision.transforms as transforms
 from models import *
 # from utils import progress_bar
 from attack import PGDAttack
-from wrapper import ModelWrapper, TestWrapper
+from wrapper import ModelWrapper, TestWrapper, CIFARWrapper
 
 
 parser = argparse.ArgumentParser(description='PyTorch MAT Training')
@@ -31,7 +31,7 @@ parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 args = parser.parse_args()
 
-data_file = "../../../data/"
+data_file = "/scratch/gilbreth/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
@@ -66,15 +66,20 @@ print('==> Preparing data..')
 batch_size = 128
 num_classes = 10
 
-transform_train = transforms.Compose([
+mnist_train = transforms.Compose([
     transforms.ToTensor()
 ])
-
+cifar_train = transforms.Compose([
+    transforms.ToTensor()
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip()
+])
 transform_test = transforms.Compose([transforms.ToTensor()])
+
 if args.dataset == "MNIST":
     # data load
     trainset = torchvision.datasets.MNIST(
-        root=data_file, train=True, download=True, transform=transform_train)
+        root=data_file, train=True, download=True, transform=mnist_train)
 
     trainloader = []
     for i in range(args.ensembles):
@@ -92,9 +97,8 @@ if args.dataset == "MNIST":
 
 elif args.dataset == "CIFAR10":
     # data load
-    transform_test = transforms.Compose([transforms.ToTensor()])
     trainset = torchvision.datasets.CIFAR10(
-        root=data_file, train=True, download=True, transform=transform_train)
+        root=data_file, train=True, download=True, transform=cifar_train)
 
     trainloader = []
     for i in range(args.ensembles):
@@ -225,7 +229,10 @@ def test(epoch, net):
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        train(ModelWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
+        if args.dataset == 'MNIST':
+            train(ModelWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
+        elif args.dataset == 'CIFAR10':
+            train(CIFARWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
         scheduler.step()
         if epoch % 5 == 0:
             test(epoch, TestWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))

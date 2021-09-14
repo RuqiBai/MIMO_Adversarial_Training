@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
+import torchvision.transforms as transforms
 
 
 class ModelWrapper(nn.Module):
@@ -44,3 +45,12 @@ class TestWrapper(ModelWrapper):
         _, predicted = outputs.max(1)
         correct = predicted.eq(targets).sum().item()
         return correct
+
+class CIFARWrapper(ModelWrapper):
+    def __init__(self, model, sub_in_channels, num_classes, ensembles, criterion):
+        super().__init__(model, sub_in_channels, num_classes, ensembles, criterion)
+        self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))
+
+    def forward(self, x, *args):
+        out = self.normalize(x)
+        return self.model(out)
