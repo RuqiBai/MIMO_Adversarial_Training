@@ -70,7 +70,7 @@ mnist_train = transforms.Compose([
     transforms.ToTensor()
 ])
 cifar_train = transforms.Compose([
-    transforms.ToTensor()
+    transforms.ToTensor(),
     transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip()
 ])
