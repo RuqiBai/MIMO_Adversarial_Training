@@ -54,3 +54,19 @@ class CIFARWrapper(ModelWrapper):
     def forward(self, x, *args):
         out = self.normalize(x)
         return self.model(out)
+
+class CIFARTestWrapper(TestWrapper):
+    def __init__(self):
+        super().__init__()
+        self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))
+
+    def forward(self, x, softmax=True):
+        out = self.normalize(x)
+        out = out.repeat(1, self.ensembles, 1, 1)
+        outputs = self.model(out).reshape(-1, self.ensembles, 10)
+        if softmax:
+            outputs = F.softmax(outputs, dim=2)
+        outputs = torch.mean(outputs, dim=1)
+        # outputs = outputs[:,2,:]
+        return outputs
+   
