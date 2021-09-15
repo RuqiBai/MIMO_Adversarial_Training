@@ -15,7 +15,7 @@ class ModelWrapper(nn.Module):
         if dataset == 'CIFAR10':
             self.sub_in_channels = 3
             self.num_classes = 10
-            self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))
+            self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465)*ensembles, (0.2471, 0.2435, 0.2616)*ensembles)
         elif dataset == 'MNIST':
             self.sub_in_channels = 1
             self.num_classes = 10
