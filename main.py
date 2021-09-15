@@ -12,7 +12,7 @@ import torchvision.transforms as transforms
 from models import *
 # from utils import progress_bar
 from attack import PGDAttack
-from wrapper import ModelWrapper, TestWrapper, CIFARWrapper
+from wrapper import ModelWrapper, TestWrapper
 
 
 parser = argparse.ArgumentParser(description='PyTorch MAT Training')
@@ -229,11 +229,9 @@ def test(epoch, net):
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        if args.dataset == 'MNIST':
-            train(ModelWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
-        elif args.dataset == 'CIFAR10':
-            train(CIFARWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
+        train(ModelWrapper(net, model=args.model, ensembles=args.ensembles, criterion=criterion), epoch)
+    
         scheduler.step()
         if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
+            test(epoch, TestWrapper(net, model=args.model, ensembles=args.ensembles, criterion=criterion))
         

@@ -10,35 +10,69 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from wrapper import TestWrapper
 import eagerpy as ep
+import torch.nn as nn
 
 # from fast_adv.attacks import DDN
 
 parser = argparse.ArgumentParser(description='PyTorch MNIST Evaluating')
-parser.add_argument('--ensembles', default=1, type=int)
+parser.add_argument('--ensembles', default=3, type=int, help='ensemble number')
 parser.add_argument('--file_name')
 parser.add_argument('--norm', type=float)
-parser.add_argument('--epsilon', type=float)
 parser.add_argument('--max_iter', default=100, type=int)
 parser.add_argument('--restarts', default=10, type=int)
 parser.add_argument('--attack', choices=('PGD', 'FGSM', 'BBA', 'Gaussian Noise', 'Boundary Attack',
                                          'DeepFool', 'DDN', 'CW', 'SP'))
-args = parser.parse_args()
-restarts = args.restarts
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-best_acc = 0
-# Data
-print('==> Preparing data..')
-num_classes = 10
-transform_train = transforms.Compose([
-    transforms.ToTensor()
-])
+                                         
+parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
+parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 
+# command parameter setting
+args = parser.parse_args()
+ensembles = args.ensembles
+file_name = args.file_name
+norm = args.norm
+max_iter = args.max_iter
+restarts = args.restarts
+attack = args.attack
+dataset = args.dataset
+model = args.model
+
+# init envs
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+data_file = "/scratch/gilbreth/bai116/data/"
+best_acc = 0
+criterion = nn.CrossEntropyLoss()
+
+# dataset setting
 transform_test = transforms.Compose([transforms.ToTensor()])
-testset = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform_test)
+
+if dataset == "MNIST":
+    in_channels = 1
+    num_classes = 10
+    testset = torchvision.datasets.MNIST(root=data_file, train=False, download=True, transform=transform_test)
+elif dataset == "CIFAR10":
+    in_channels = 3
+    num_classes = 10
+    testset = torchvision.datasets.CIFAR10(root=data_file, train=False, download=True, transform=transform_test)
+else:
+    raise NotImplementedError("Only MNIST and CIFAR10 are supported now")
 testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=1)
 
-# MIMO Model
+# Model Setting
 print('==> Building model..')
+if args.model == 'nn':
+    net = net(args.ensembles)
+elif args.model == 'resnet18':
+    net = ResNet18(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
+elif args.model == 'resnet50':
+    net = ResNet50(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
+elif args.model == 'preact_resnet18':
+    net = PreActResNet18(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
+else:
+    raise ModuleNotFoundError("Unknown model")
+if device == 'cuda':
+    net = torch.nn.DataParallel(net)
+    cudnn.benchmark = True
 
 net = net(args.ensembles).to(device)
 # net = ResNet18(args.ensembles, args.ensembles*num_classes).to(device)
@@ -48,7 +82,7 @@ if device == 'cuda':
     cudnn.benchmark = True
 checkpoint = torch.load('checkpoint/{}'.format(args.file_name))
 net.load_state_dict(checkpoint['net'])
-net = TestWrapper(net, args.ensembles)
+net = TestWrapper(net, dataset=dataset, ensembles=ensembles)
 
 if args.attack == 'PGD':
     if args.norm == 1:
