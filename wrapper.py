@@ -23,7 +23,7 @@ class ModelWrapper(nn.Module):
             raise NotImplementedError("{} dataset not implemented for wrapping".format(dataset))
         self.ensembles = ensembles
         self.criterion = criterion
-        assert self.model.module.conv1.in_channels == self.sub_in_channels * self.ensembles
+        # assert self.model.module.conv1.in_channels == self.sub_in_channels * self.ensembles
 
     def forward(self, x, *args):
         if self.dataset == 'MNIST':
