@@ -29,9 +29,9 @@ parser.add_argument('--max_lr', default=1e-03, type=float)
 parser.add_argument('--mode', choices=('max', 'avg','sum'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
+parser.add_argument('--verbose', action='store_true')
 args = parser.parse_args()
-
-data_file = "../../../data/"
+data_file = "/local/scratch/a/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
@@ -47,7 +47,7 @@ else:
 
 # MIMO Model
 print('==> Building model..')
-if args.model == 'nn':
+if args.model == 'dnn':
     net = net(args.ensembles)
 elif args.model == 'resnet18':
     net = ResNet18(in_channels*args.ensembles, args.ensembles*num_classes).to(device)
@@ -108,7 +108,6 @@ elif args.dataset == "CIFAR10":
     optimizer = optim.SGD(net.parameters(), lr=1, momentum=0.9, weight_decay=5e-4)
     lr_schedule = lambda t: np.interp([t], [0, args.epochs * 2 // 5, args.epochs * 4 // 5, args.epochs], [0, 0.1, 0.005, 0])[0]
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_schedule)
-
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
@@ -124,8 +123,9 @@ if args.resume:
 def train(model, epoch):
     model.train()
     if args.adv_training and epoch > 1:
-        attack = PGDAttack(model, alpha=args.alpha, epsilon=args.epsilon, norm=args.norm, max_iteration=args.max_iter, msd=True, random_start=True)
-
+        attack = PGDAttack(model, alpha=args.alpha, epsilon=args.epsilon, norm=args.norm, max_iteration=args.max_iter, msd=True, random_start=True, verbose=args.verbose)
+    if epoch == 1:
+        return
     correct = torch.zeros(args.ensembles)
     total = 0
     for batch_idx, data in enumerate(zip(*trainloader)):
@@ -144,10 +144,10 @@ def train(model, epoch):
         loss_list = model.calc_loss(outputs, targets)
         if args.mode == "max":
             loss = torch.max(loss_list)
-        elif args.mode == "avg":
+        elif args.mode == "avg" or args.mode == "sum":
             loss = torch.sum(loss_list)
         else:
-            raise NotImplementedError("Only support max or sum of subnetwork's loss")
+            raise NotImplementedError("Only support max or sum/avg of subnetwork's loss")
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
