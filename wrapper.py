@@ -15,7 +15,7 @@ class ModelWrapper(nn.Module):
         if dataset == 'CIFAR10':
             self.sub_in_channels = 3
             self.num_classes = 10
-            self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))
+            self.normalize = transforms.Normalize((0.4914, 0.4822, 0.4465)*ensembles, (0.2471, 0.2435, 0.2616)*ensembles)
         elif dataset == 'MNIST':
             self.sub_in_channels = 1
             self.num_classes = 10
@@ -41,13 +41,9 @@ class ModelWrapper(nn.Module):
 
 class TestWrapper(ModelWrapper):
     def forward(self, x, softmax=True):
+        out = x.repeat(1, self.ensembles, 1, 1)
         if self.dataset == 'CIFAR10':
-            out = self.normalize(x)
-        elif self.dataset == 'MNIST':
-            out = x
-        else:
-            out = x
-        out = out.repeat(1, self.ensembles, 1, 1)
+            out = self.normalize(out)
         outputs = self.model(out).reshape(-1, self.ensembles, 10)
         if softmax:
             outputs = F.softmax(outputs, dim=2)

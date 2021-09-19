@@ -83,12 +83,12 @@ if args.dataset == "MNIST":
 
     trainloader = []
     for i in range(args.ensembles):
-        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4))
+        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2))
 
     testset = torchvision.datasets.MNIST(
         root=data_file, train=False, download=True, transform=transform_test)
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=100, shuffle=False, num_workers=4)
+        testset, batch_size=100, shuffle=False, num_workers=2)
 
     # hyperparameter load
     optimizer = optim.Adam(net.parameters(), lr=1)
@@ -229,9 +229,9 @@ def test(epoch, net):
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        train(ModelWrapper(net, model=args.model, ensembles=args.ensembles, criterion=criterion), epoch)
+        train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
     
         scheduler.step()
         if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, model=args.model, ensembles=args.ensembles, criterion=criterion))
+            test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
         
