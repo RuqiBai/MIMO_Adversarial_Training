@@ -31,7 +31,12 @@ parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 parser.add_argument('--verbose', action='store_true')
 args = parser.parse_args()
+<<<<<<< HEAD
 data_file = "/local/scratch/a/bai116/data/"
+=======
+
+data_file = "/scratch/gilbreth/bai116/data/"
+>>>>>>> 4be13d1c07b9b77b7d9875fca3874c290dcbe13a
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
@@ -66,24 +71,29 @@ print('==> Preparing data..')
 batch_size = 128
 num_classes = 10
 
-transform_train = transforms.Compose([
+mnist_train = transforms.Compose([
     transforms.ToTensor()
 ])
-
+cifar_train = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip()
+])
 transform_test = transforms.Compose([transforms.ToTensor()])
+
 if args.dataset == "MNIST":
     # data load
     trainset = torchvision.datasets.MNIST(
-        root=data_file, train=True, download=True, transform=transform_train)
+        root=data_file, train=True, download=True, transform=mnist_train)
 
     trainloader = []
     for i in range(args.ensembles):
-        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4))
+        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2))
 
     testset = torchvision.datasets.MNIST(
         root=data_file, train=False, download=True, transform=transform_test)
     testloader = torch.utils.data.DataLoader(
-        testset, batch_size=100, shuffle=False, num_workers=4)
+        testset, batch_size=100, shuffle=False, num_workers=2)
 
     # hyperparameter load
     optimizer = optim.Adam(net.parameters(), lr=1)
@@ -92,9 +102,8 @@ if args.dataset == "MNIST":
 
 elif args.dataset == "CIFAR10":
     # data load
-    transform_test = transforms.Compose([transforms.ToTensor()])
     trainset = torchvision.datasets.CIFAR10(
-        root=data_file, train=True, download=True, transform=transform_train)
+        root=data_file, train=True, download=True, transform=cifar_train)
 
     trainloader = []
     for i in range(args.ensembles):
@@ -225,8 +234,9 @@ def test(epoch, net):
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
         print(epoch)
-        train(ModelWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion), epoch)
+        train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
+    
         scheduler.step()
         if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, sub_in_channels=in_channels, num_classes=num_classes, ensembles=args.ensembles, criterion=criterion))
+            test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
         
