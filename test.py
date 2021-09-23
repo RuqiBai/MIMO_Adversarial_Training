@@ -1,5 +1,6 @@
 import foolbox
 import foolbox.attacks as fa
+import advertorch
 import argparse
 import torch
 from models import *
@@ -18,7 +19,7 @@ import random
 parser = argparse.ArgumentParser(description='MAT, MSD Evaluating')
 parser.add_argument('--ensembles', default=3, type=int, help='ensemble number')
 parser.add_argument('--file_name', help='the model parameters file')
-parser.add_argument('--restarts', default=10, type=int)
+parser.add_argument('--restarts', default=1, type=int)
 parser.add_argument('--attack', choices=('PGD', 'FGSM', 'BBA', 'Gaussian', 'Boundary',
                                          'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
@@ -78,7 +79,7 @@ if device == 'cuda':
 
 checkpoint = torch.load('checkpoint/{}'.format(args.file_name))
 net.load_state_dict(checkpoint['net'])
-net = TestWrapper(net, dataset=dataset, ensembles=ensembles, criterion=criterion)
+net = TestWrapper(net, dataset=dataset, ensembles=ensembles, criterion=criterion, softmax=False)
 
 if attack_name == 'PGD':
     if args.norm == 1:
@@ -128,7 +129,8 @@ elif attack_name == 'Boundary':
 
 elif attack_name == 'CW':
     if args.norm == 2:
-        attack = fa.L2CarliniWagnerAttack()
+        # attack = fa.L2CarliniWagnerAttack()
+        attack = advertorch.attacks.CarliniWagnerL2Attack(net, num_classes=10)
     else:
         raise ValueError('norm should be 2')
 
@@ -137,9 +139,12 @@ elif attack_name == 'SP':
         attack = fa.SaltAndPepperNoiseAttack()
     else:
         raise ValueError('norm should be 1')
-
-# elif attack_name == 'EAD':
-    
+elif attack_name == 'EAD':
+    if args.norm == 1:
+        # attack = fa.EADAttack()
+        attack = advertorch.attacks.ElasticNetL1Attack(net, num_classes=10)
+    else:
+        raise ValueError('norm should be 1')
 net.eval()
 save_path = "./attack/{}/".format(os.path.splitext(file_name)[0])
 
@@ -150,23 +155,36 @@ fmodel = foolbox.models.PyTorchModel(net,bounds=(0., 1.), device=device)
 for images, labels in testloader:
     total += images.shape[0]
     print(total)
-    images = ep.astensor(images.to(device))
-    labels = ep.astensor(labels.to(device))
-    clean_acc = foolbox.accuracy(fmodel, images, labels)
-    print(clean_acc)
-    worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device)) 
-    for r in range (restarts):
-        print(restarts)
-        if attack_name == 'Boundary':
-            _, clip_adv, success  = attack(fmodel, images, criterion=labels)
+    images = images.to(device)
+    labels = labels.to(device)
+    fimages = ep.astensor(images)
+    flabels = ep.astensor(labels)
+    clean_acc = foolbox.accuracy(fmodel, fimages, flabels)
+    # worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device)) 
+    worst_case_succ = torch.zeros(batch_size, dtype=torch.bool).to(device)
+    for r in range(restarts):
+        print("{}/{}".format(r, restarts))
+        if attack_name != "CW" and attack_name != "EAD":
+            _, clip_adv, success  = attack(fmodel, fimages, criterion=flabels, epsilons=epsilon[norm])
+            dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
+            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
         else:
-            _, clip_adv, success  = attack(fmodel, images, criterion=labels, epsilons=epsilon[norm])
-        dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
-        worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm])))
+            clip_adv = attack.perturb(images, labels)
+            outputs = net(clip_adv)
+            _, predicted = outputs.max(1)
+            success = predicted.ne(labels)
+            dist = (clip_adv-images).reshape((batch_size,-1)).norm(p=norm,dim=1)
+            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
+            print(clip_adv[0])
+            print(images[0])
+            print(success)
+            print(epsilon[norm])
+            print(dist)
+            print(dist.le(epsilon[norm]+0.0001))
     if res is not None:
-        res = torch.cat((res,worst_case_succ.raw))
+        res = torch.cat((res,worst_case_succ))
     else:
-        res = worst_case_succ.raw
+        res = worst_case_succ
     if total >= 1000:
         break
 torch.save(res[0:1000], open(save_path + attack_name + '_' + str(norm), 'wb'))
