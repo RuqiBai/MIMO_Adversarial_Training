@@ -129,8 +129,7 @@ elif attack_name == 'Boundary':
 
 elif attack_name == 'CW':
     if args.norm == 2:
-        # attack = fa.L2CarliniWagnerAttack()
-        attack = advertorch.attacks.CarliniWagnerL2Attack(net, num_classes=10)
+        attack = fa.L2CarliniWagnerAttack()
     else:
         raise ValueError('norm should be 2')
 
@@ -141,8 +140,7 @@ elif attack_name == 'SP':
         raise ValueError('norm should be 1')
 elif attack_name == 'EAD':
     if args.norm == 1:
-        # attack = fa.EADAttack()
-        attack = advertorch.attacks.ElasticNetL1Attack(net, num_classes=10)
+        attack = fa.EADAttack()
     else:
         raise ValueError('norm should be 1')
 net.eval()
@@ -154,35 +152,23 @@ res = None
 fmodel = foolbox.models.PyTorchModel(net,bounds=(0., 1.), device=device)
 for images, labels in testloader:
     total += images.shape[0]
-    print(total)
     images = images.to(device)
     labels = labels.to(device)
     fimages = ep.astensor(images)
     flabels = ep.astensor(labels)
     clean_acc = foolbox.accuracy(fmodel, fimages, flabels)
-    # worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device)) 
-    worst_case_succ = torch.zeros(batch_size, dtype=torch.bool).to(device)
+    worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device)) 
+    # worst_case_succ = torch.zeros(batch_size, dtype=torch.bool).to(device)
     for r in range(restarts):
         print("{}/{}".format(r, restarts))
-        if attack_name != "CW" and attack_name != "EAD":
-            _, clip_adv, success  = attack(fmodel, fimages, criterion=flabels, epsilons=epsilon[norm])
-            dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
-            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
-        else:
-            clip_adv = attack.perturb(images, labels)
-            outputs = net(clip_adv)
-            _, predicted = outputs.max(1)
-            success = predicted.ne(labels)
-            dist = (clip_adv-images).reshape((batch_size,-1)).norm(p=norm,dim=1)
-            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
-            print(clip_adv[0])
-            print(images[0])
-            print(success)
-            print(epsilon[norm])
-            print(dist)
-            print(dist.le(epsilon[norm]+0.0001))
+        _, clip_adv, success  = attack(fmodel, fimages, criterion=flabels, epsilons=epsilon[norm])
+        dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
+        worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
+        print(dist)
+        print(success)
+        print(worst_case_succ)
     if res is not None:
-        res = torch.cat((res,worst_case_succ))
+        res = torch.cat((res,worst_case_succ.raw))
     else:
         res = worst_case_succ
     if total >= 1000:
