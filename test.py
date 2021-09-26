@@ -21,7 +21,7 @@ parser.add_argument('--ensembles', default=3, type=int, help='ensemble number')
 parser.add_argument('--file_name', help='the model parameters file')
 parser.add_argument('--restarts', default=1, type=int)
 parser.add_argument('--attack', choices=('PGD', 'FGSM', 'BBA', 'Gaussian', 'Boundary',
-                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO'))
+                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO', 'HotSkipJump'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 parser.add_argument('--batch_size', type=int, default=100)
@@ -122,11 +122,16 @@ elif attack_name == 'Gaussian':
 
 elif attack_name == 'Boundary':
     if args.norm == 2:
-        attack = fa.BoundaryAttack()
+        attack = fa.BoundaryAttack(init_attack=fa.DDNAttack(init_epsilon=epsilon[norm]*10, gamma=1.0, steps=800))
         restarts = 1
     else:
         raise ValueError('norm should be 2')
 
+elif attack_name == 'HotSkipJump':
+    if args.norm == float('inf'):
+        attack = fa.HopSkipJump(init_attack=fa.DDNAttack(init_epsilon=epsilon[norm]*10, gamma=1.0, steps=800), steps=256)
+    else:
+       raise ValueError('norm should be inf')
 elif attack_name == 'CW':
     if args.norm == 2:
         attack = fa.L2CarliniWagnerAttack()
@@ -174,4 +179,4 @@ for images, labels in testloader:
     if total >= 1000:
         break
 torch.save(res[0:1000], open(save_path + attack_name + '_' + str(norm), 'wb'))
-print(1-res[0:1000].float().mean())
+print(1-res[0:1000].raw.float().mean())
