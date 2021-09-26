@@ -1,6 +1,5 @@
 import foolbox
 import foolbox.attacks as fa
-import advertorch
 import argparse
 import torch
 from models import *
@@ -21,7 +20,7 @@ parser.add_argument('--ensembles', default=3, type=int, help='ensemble number')
 parser.add_argument('--file_name', help='the model parameters file')
 parser.add_argument('--restarts', default=1, type=int)
 parser.add_argument('--attack', choices=('PGD', 'FGSM', 'BBA', 'Gaussian', 'Boundary',
-                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO', 'HotSkipJump'))
+                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO', 'HopSkipJump'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 parser.add_argument('--batch_size', type=int, default=100)
@@ -127,7 +126,7 @@ elif attack_name == 'Boundary':
     else:
         raise ValueError('norm should be 2')
 
-elif attack_name == 'HotSkipJump':
+elif attack_name == 'HopSkipJump':
     if args.norm == float('inf'):
         attack = fa.HopSkipJump(init_attack=fa.DDNAttack(init_epsilon=epsilon[norm]*10, gamma=1.0, steps=800), steps=256)
     else:
