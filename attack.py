@@ -113,8 +113,7 @@ class PGDStep(AttackStep):
     def __init__(self, model: ModelWrapper, alpha: list, epsilon: list, norm: list):
         super().__init__(model, alpha, epsilon, norm)
 
-    def step(self, inputs, delta, targets: torch.Tensor, f=False):
-        grad = delta.grad
+    def step(self, inputs, delta, targets: torch.Tensor, grad, f=False):
         with torch.no_grad():
             for i in range(self.model.ensembles):
                 sub_inputs = inputs[:, i*self.model.sub_in_channels:(i+1)*self.model.sub_in_channels]
@@ -130,8 +129,7 @@ class MSDStep(AttackStep):
     def __init__(self, model: ModelWrapper, alpha: list, epsilon: list, norm: list):
         super().__init__(model, alpha, epsilon, norm)
 
-    def step(self, inputs: torch.Tensor, delta, targets: torch.Tensor, f=False):
-        grad = torch.clone(delta.grad)
+    def step(self, inputs: torch.Tensor, delta, targets: torch.Tensor, grad, f=False):
         tmp_delta_list = []
         loss_list = []
         with torch.no_grad():
@@ -167,7 +165,7 @@ class MSDStep(AttackStep):
 
 
 class PGDAttack(object):
-    def __init__(self, model:ModelWrapper, alpha, epsilon, norm, max_iteration, msd=False, random_start=True, verbose=False):
+    def __init__(self, model:ModelWrapper, alpha, epsilon, norm, max_iteration, msd=False, random_start=True, approximate_gradient=True, verbose=False):
         self.model = model
         self.ensembles = model.ensembles
         self.sub_in_channel = model.sub_in_channels
@@ -182,6 +180,7 @@ class PGDAttack(object):
             self.attack = PGDStep(model, alpha, epsilon, norm)
         self.max_iteration = max_iteration
         self.random_start = random_start
+        self.approximate_gradient = approximate_gradient
         self.verbose = verbose
         if self.verbose:
             self.f = open("verbose.txt", 'w')
@@ -235,7 +234,22 @@ class PGDAttack(object):
             delta.requires_grad = True
             loss = torch.sum(self.model.calc_loss(self.model(inputs + delta), targets))
             loss.backward()
-            delta = self.attack.step(inputs, delta, targets, self.f)
+            if self.approximate_gradient:
+                grad = torch.clone(delta.grad)
+            else:
+                grad = []
+                for k in range(self.ensembles):
+                    self.model.zero_grad()
+                    print(delta.grad.shape)
+                    loss = self.model.calc_loss(self.model(inputs + delta), targets)
+                    loss = loss[k]
+                    loss.backward()
+                    g = delta.grad.detach
+                    grad.append(g[:,k * self.model.sub_in_channels:(k+1) * self.model.sub_in_channels,:,:])
+                grad = torch.cat(grad, dim=1)
+            print(grad.shape)
+            print("----")
+            delta = self.attack.step(inputs, delta, targets, grad, self.f)
         if is_training:
             self.model.train()
         outputs = (inputs + delta).detach()
