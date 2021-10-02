@@ -43,8 +43,8 @@ batch_size = args.batch_size
 # init envs
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # data_file = "/scratch/gilbreth/bai116/data/"
-# data_file = "../../../data"
-data_file = "/local/scratch/a/bai116/data/"
+data_file = "../../../data"
+# data_file = "/local/scratch/a/bai116/data/"
 best_acc = 0
 criterion = nn.CrossEntropyLoss()
 
@@ -137,7 +137,11 @@ elif attack_name == 'HopSkipJump':
         # attack = fa.HopSkipJump()
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(net.parameters(), lr=0.01)
-        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+        if dataset == 'MNIST':
+            shape = (1,28,28)
+        elif dataset == 'CIFAR10':
+            shape = (3,32,32)
+        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=shape,nb_classes=10,)
         attack = HopSkipJump(classifier, norm=args.norm)
     else:
        raise ValueError('norm should be inf')
@@ -149,20 +153,31 @@ elif attack_name == 'CW':
 elif attack_name == 'AUTO':
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=0.01)
-    classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+    if dataset == 'MNIST':
+        shape = (1,28,28)
+    elif dataset == 'CIFAR10':
+        shape = (3,32,32)
+    classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=shape,nb_classes=10,)
     attack = AutoAttack(classifier, batch_size=batch_size)
 
 
 elif attack_name == 'SP':
     if args.norm == 1:
         attack = fa.SaltAndPepperNoiseAttack()
+        print(attack.distance)
+        attack.distance = foolbox.distances.l1
+        print(attack.distance)
     else:
         raise ValueError('norm should be 1')
 elif attack_name == 'Pointwise':
     if args.norm == 1:
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(net.parameters(), lr=0.01)
-        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+        if dataset == 'MNIST':
+            shape = (1,28,28)
+        elif dataset == 'CIFAR10':
+            shape = (3,32,32)
+        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=shape,nb_classes=10,)
         attack = BrendelBethgeAttack(classifier, norm=args.norm, steps=3000, binary_search_steps=40)
         print(args.norm)
         # attack = fa.L1BrendelBethgeAttack()
@@ -190,7 +205,7 @@ for images, labels in testloader:
         fimages = ep.astensor(images)
         flabels = ep.astensor(labels)
         clean_acc = foolbox.accuracy(fmodel, fimages, flabels)
-        worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device))
+        worst_case_succ = torch.zeros(batch_size, dtype=torch.bool).to(device)
     print(clean_acc)
     for r in range(restarts):
         print("{}/{}".format(r, restarts))
@@ -203,7 +218,7 @@ for images, labels in testloader:
         else:
             _, clip_adv, success  = attack(fmodel, fimages, criterion=flabels, epsilons=epsilon[norm])
             dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
-            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
+            worst_case_succ = worst_case_succ.logical_or(success.raw.logical_and(dist.le(epsilon[norm]+0.0001)))
     print(dist)
     print(worst_case_succ)
     if res is not None:
