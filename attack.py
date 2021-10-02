@@ -243,7 +243,7 @@ class PGDAttack(object):
                     loss = self.model.calc_loss(self.model(inputs + delta), targets)
                     loss = loss[k]
                     loss.backward()
-                    g = delta.grad.detach
+                    g = delta.grad.detach()
                     grad.append(g[:,k * self.model.sub_in_channels:(k+1) * self.model.sub_in_channels,:,:])
                 grad = torch.cat(grad, dim=1)
             delta = self.attack.step(inputs, delta, targets, grad, self.f)
