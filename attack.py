@@ -240,15 +240,12 @@ class PGDAttack(object):
                 grad = []
                 for k in range(self.ensembles):
                     self.model.zero_grad()
-                    print(delta.grad.shape)
                     loss = self.model.calc_loss(self.model(inputs + delta), targets)
                     loss = loss[k]
                     loss.backward()
                     g = delta.grad.detach
                     grad.append(g[:,k * self.model.sub_in_channels:(k+1) * self.model.sub_in_channels,:,:])
                 grad = torch.cat(grad, dim=1)
-            print(grad.shape)
-            print("----")
             delta = self.attack.step(inputs, delta, targets, grad, self.f)
         if is_training:
             self.model.train()
