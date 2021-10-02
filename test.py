@@ -2,6 +2,7 @@ import foolbox
 import foolbox.attacks as fa
 import argparse
 import torch
+import torch.optim as optim
 from models import *
 import torch.backends.cudnn as cudnn
 import torchvision
@@ -10,21 +11,24 @@ from torch.utils.data import DataLoader
 from wrapper import TestWrapper
 import eagerpy as ep
 import torch.nn as nn
+import numpy as np
 import os
 import random
+from art.attacks.evasion import HopSkipJump, BrendelBethgeAttack, AutoAttack
+from art.estimators.classification import PyTorchClassifier
 
 # from fast_adv.attacks import DDN
 
 parser = argparse.ArgumentParser(description='MAT, MSD Evaluating')
 parser.add_argument('--ensembles', default=3, type=int, help='ensemble number')
 parser.add_argument('--file_name', help='the model parameters file')
-parser.add_argument('--restarts', default=10, type=int)
+parser.add_argument('--restarts', default=1, type=int)
 parser.add_argument('--attack', choices=('PGD', 'FGSM', 'BBA', 'Gaussian', 'Boundary',
-                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO'))
+                                         'DeepFool', 'DDN', 'CW', 'SP', 'EAD', 'AUTO', 'HopSkipJump', 'Pointwise'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 parser.add_argument('--batch_size', type=int, default=100)
-
+parser.add_argument('--softmax', action="store_true")
 # command parameter setting
 parser.add_argument('--norm', type=float)
 args = parser.parse_args()
@@ -40,6 +44,7 @@ batch_size = args.batch_size
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # data_file = "/scratch/gilbreth/bai116/data/"
 data_file = "../../../data"
+# data_file = "/local/scratch/a/bai116/data/"
 best_acc = 0
 criterion = nn.CrossEntropyLoss()
 
@@ -78,7 +83,7 @@ if device == 'cuda':
 
 checkpoint = torch.load('checkpoint/{}'.format(args.file_name))
 net.load_state_dict(checkpoint['net'])
-net = TestWrapper(net, dataset=dataset, ensembles=ensembles, criterion=criterion)
+net = TestWrapper(net, dataset=dataset, ensembles=ensembles, criterion=criterion, softmax=args.softmax)
 
 if attack_name == 'PGD':
     if args.norm == 1:
@@ -121,25 +126,51 @@ elif attack_name == 'Gaussian':
 
 elif attack_name == 'Boundary':
     if args.norm == 2:
-        attack = fa.BoundaryAttack()
+        attack = fa.BoundaryAttack(init_attack=fa.DDNAttack(init_epsilon=epsilon[norm]*10, gamma=1.0, steps=800))
         restarts = 1
     else:
         raise ValueError('norm should be 2')
 
+elif attack_name == 'HopSkipJump':
+    if args.norm == float('inf'):
+        # attack = fa.HopSkipJump(init_attack=fa.DDNAttack(init_epsilon=epsilon[norm]*4, gamma=1.0, steps=200))
+        # attack = fa.HopSkipJump()
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(net.parameters(), lr=0.01)
+        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+        attack = HopSkipJump(classifier, norm=args.norm)
+    else:
+       raise ValueError('norm should be inf')
 elif attack_name == 'CW':
     if args.norm == 2:
         attack = fa.L2CarliniWagnerAttack()
     else:
         raise ValueError('norm should be 2')
+elif attack_name == 'AUTO':
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(net.parameters(), lr=0.01)
+    classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+    attack = AutoAttack(classifier, batch_size=batch_size)
+
 
 elif attack_name == 'SP':
     if args.norm == 1:
         attack = fa.SaltAndPepperNoiseAttack()
     else:
         raise ValueError('norm should be 1')
-
-# elif attack_name == 'EAD':
-    
+elif attack_name == 'Pointwise':
+    if args.norm == 1:
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(net.parameters(), lr=0.01)
+        classifier = PyTorchClassifier(model=net, clip_values=(0, 1), loss=criterion, optimizer=optimizer,input_shape=(1, 28, 28),nb_classes=10,)
+        attack = BrendelBethgeAttack(classifier, norm=args.norm, steps=3000, binary_search_steps=40)
+        print(args.norm)
+        # attack = fa.L1BrendelBethgeAttack()
+elif attack_name == 'EAD':
+    if args.norm == 1:
+        attack = fa.EADAttack()
+    else:
+        raise ValueError('norm should be 1')
 net.eval()
 save_path = "./attack/{}/".format(os.path.splitext(file_name)[0])
 
@@ -149,24 +180,36 @@ res = None
 fmodel = foolbox.models.PyTorchModel(net,bounds=(0., 1.), device=device)
 for images, labels in testloader:
     total += images.shape[0]
-    print(total)
-    images = ep.astensor(images.to(device))
-    labels = ep.astensor(labels.to(device))
-    clean_acc = foolbox.accuracy(fmodel, images, labels)
-    print(clean_acc)
-    worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device)) 
-    for r in range (restarts):
-        print(restarts)
-        if attack_name == 'Boundary':
-            _, clip_adv, success  = attack(fmodel, images, criterion=labels)
-        else:
-            _, clip_adv, success  = attack(fmodel, images, criterion=labels, epsilons=epsilon[norm])
-        dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
-        worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm])))
-    if res is not None:
-        res = torch.cat((res,worst_case_succ.raw))
+    if attack_name == 'HopSkipJump' or attack_name == 'Pointwise' or attack_name == 'AUTO':
+        predictions = classifier.predict(images)
+        clean_acc = np.sum(np.argmax(predictions, axis=1) == labels.numpy()) / len(labels)
+        worst_case_succ = torch.zeros(batch_size, dtype=torch.bool)
     else:
-        res = worst_case_succ.raw
+        images = images.to(device)
+        labels = labels.to(device)
+        fimages = ep.astensor(images)
+        flabels = ep.astensor(labels)
+        clean_acc = foolbox.accuracy(fmodel, fimages, flabels)
+        worst_case_succ = ep.astensor(torch.zeros(batch_size, dtype=torch.bool).to(device))
+    print(clean_acc)
+    for r in range(restarts):
+        print("{}/{}".format(r, restarts))
+        if attack_name == 'HopSkipJump' or attack_name == 'Pointwise' or attack_name == 'AUTO':
+            clip_adv = attack.generate(images.numpy())
+            predictions = classifier.predict(clip_adv)
+            success = torch.tensor(np.argmax(predictions, axis=1) != labels.numpy())
+            dist = (torch.tensor(clip_adv) - images).reshape((batch_size,-1)).norm(p=norm,dim=1)
+            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
+        else:
+            _, clip_adv, success  = attack(fmodel, fimages, criterion=flabels, epsilons=epsilon[norm])
+            dist = (clip_adv-images).reshape((batch_size,-1)).raw.norm(p=norm,dim=1)
+            worst_case_succ = worst_case_succ.logical_or(success.logical_and(dist.le(epsilon[norm]+0.0001)))
+    print(dist)
+    print(worst_case_succ)
+    if res is not None:
+        res = torch.cat((res,worst_case_succ))
+    else:
+        res = worst_case_succ
     if total >= 1000:
         break
 torch.save(res[0:1000], open(save_path + attack_name + '_' + str(norm), 'wb'))
