@@ -29,12 +29,14 @@ parser.add_argument('--max_lr', default=1e-03, type=float)
 parser.add_argument('--mode', choices=('max', 'avg','sum'))
 parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
+parser.add_argument('--no_approximate_gradient', action='store_false')
 parser.add_argument('--verbose', action='store_true')
 args = parser.parse_args()
 data_file = "/local/scratch/a/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
+resume_epoch = 1
 criterion = nn.CrossEntropyLoss()
 if args.dataset == "MNIST":
     in_channels = 1
@@ -102,7 +104,7 @@ elif args.dataset == "CIFAR10":
 
     trainloader = []
     for i in range(args.ensembles):
-        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4))
+        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2))
 
     testset = torchvision.datasets.CIFAR10(
         root=data_file, train=False, download=True, transform=transform_test)
@@ -116,18 +118,18 @@ if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/ckpt_mimo_mnist_49.pth')
+    checkpoint = torch.load('./checkpoint/ckpt_mat_CIFAR10_65.pth')
     # checkpoint = torch.load('./checkpoint/ckpt_0411.pth')
     net.load_state_dict(checkpoint['net'])
     best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
-    optimizer = checkpoint['optimizer']
-    scheduler.load_state_dict(checkpoint['scheduler'])
+    resume_epoch = checkpoint['epoch']
+    # optimizer = checkpoint['optimizer']
+    # scheduler.load_state_dict(checkpoint['scheduler'])
 
 def train(model, epoch):
     model.train()
     if args.adv_training and epoch > 1:
-        attack = PGDAttack(model, alpha=args.alpha, epsilon=args.epsilon, norm=args.norm, max_iteration=args.max_iter, msd=True, random_start=True, verbose=args.verbose)
+        attack = PGDAttack(model, alpha=args.alpha, epsilon=args.epsilon, norm=args.norm, max_iteration=args.max_iter, msd=True, random_start=True, approximate_gradient=(not args.no_approximate_gradient), verbose=args.verbose)
     if epoch == 1:
         return
     correct = torch.zeros(args.ensembles)
@@ -228,10 +230,10 @@ def test(epoch, net):
 
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
-        print(epoch)
-        train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
-    
+        if epoch >= resume_epoch:
+            print(epoch)
+            print(optimizer.param_groups[0]["lr"])
+            train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
+            if epoch % 5 == 0:
+                test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
         scheduler.step()
-        if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
-        
