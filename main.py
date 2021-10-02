@@ -35,6 +35,7 @@ data_file = "/scratch/gilbreth/bai116/data/"
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
+resume_epoch = 1
 criterion = nn.CrossEntropyLoss()
 if args.dataset == "MNIST":
     in_channels = 1
@@ -102,7 +103,7 @@ elif args.dataset == "CIFAR10":
 
     trainloader = []
     for i in range(args.ensembles):
-        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4))
+        trainloader.append(torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2))
 
     testset = torchvision.datasets.CIFAR10(
         root=data_file, train=False, download=True, transform=transform_test)
@@ -117,13 +118,13 @@ if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/ckpt_mimo_mnist_49.pth')
+    checkpoint = torch.load('./checkpoint/ckpt_mat_CIFAR10_65.pth')
     # checkpoint = torch.load('./checkpoint/ckpt_0411.pth')
     net.load_state_dict(checkpoint['net'])
     best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
-    optimizer = checkpoint['optimizer']
-    scheduler.load_state_dict(checkpoint['scheduler'])
+    resume_epoch = checkpoint['epoch']
+    # optimizer = checkpoint['optimizer']
+    # scheduler.load_state_dict(checkpoint['scheduler'])
 
 def train(model, epoch):
     model.train()
@@ -228,10 +229,10 @@ def test(epoch, net):
 
 if __name__ == '__main__':
     for epoch in range(start_epoch, start_epoch + args.epochs):
-        print(epoch)
-        train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
-    
+        if epoch >= resume_epoch:
+            print(epoch)
+            print(optimizer.param_groups[0]["lr"])
+            train(ModelWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion), epoch)
+            if epoch % 5 == 0:
+                test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
         scheduler.step()
-        if epoch % 5 == 0:
-            test(epoch, TestWrapper(net, dataset=args.dataset, ensembles=args.ensembles, criterion=criterion))
-        
