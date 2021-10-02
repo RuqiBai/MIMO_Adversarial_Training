@@ -31,12 +31,7 @@ parser.add_argument('--dataset', choices=('MNIST', 'CIFAR10'))
 parser.add_argument('--model', choices=('dnn', 'resnet18', 'preact_resnet18', 'resnet50'))
 parser.add_argument('--verbose', action='store_true')
 args = parser.parse_args()
-<<<<<<< HEAD
 data_file = "/local/scratch/a/bai116/data/"
-=======
-
-data_file = "/scratch/gilbreth/bai116/data/"
->>>>>>> 4be13d1c07b9b77b7d9875fca3874c290dcbe13a
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 best_acc = 0
 start_epoch = 1
